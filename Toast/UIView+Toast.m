@@ -1,5 +1,5 @@
 //
-//  UIView+Toast.m
+//  UIView+Toast.h
 //  Toast
 //
 //  Copyright (c) 2011-2017 Charles Scalesse.
@@ -23,564 +23,442 @@
 //  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 //  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#import "UIView+Toast.h"
-#import <QuartzCore/QuartzCore.h>
-#import <objc/runtime.h>
+#import <UIKit/UIKit.h>
 
-// Positions
-NSString * CSToastPositionTop                       = @"CSToastPositionTop";
-NSString * CSToastPositionCenter                    = @"CSToastPositionCenter";
-NSString * CSToastPositionBottom                    = @"CSToastPositionBottom";
+extern const NSString * CSToastPositionTop;
+extern const NSString * CSToastPositionCenter;
+extern const NSString * CSToastPositionBottom;
 
-// Keys for values associated with toast views
-static const NSString * CSToastTimerKey             = @"CSToastTimerKey";
-static const NSString * CSToastDurationKey          = @"CSToastDurationKey";
-static const NSString * CSToastPositionKey          = @"CSToastPositionKey";
-static const NSString * CSToastCompletionKey        = @"CSToastCompletionKey";
-
-// Keys for values associated with self
-static const NSString * CSToastActiveKey            = @"CSToastActiveKey";
-static const NSString * CSToastActivityViewKey      = @"CSToastActivityViewKey";
-static const NSString * CSToastQueueKey             = @"CSToastQueueKey";
-
-@interface UIView (ToastPrivate)
+@class CSToastStyle;
 
 /**
- These private methods are being prefixed with "cs_" to reduce the likelihood of non-obvious 
- naming conflicts with other UIView methods.
+ Toast is an Objective-C category that adds toast notifications to the UIView
+ object class. It is intended to be simple, lightweight, and easy to use. Most
+ toast notifications can be triggered with a single line of code.
  
- @discussion Should the public API also use the cs_ prefix? Technically it should, but it
- results in code that is less legible. The current public method names seem unlikely to cause
- conflicts so I think we should favor the cleaner API for now.
+ The `makeToast:` methods create a new view and then display it as toast.
+ 
+ The `showToast:` methods display any view as toast.
+ 
  */
-- (void)cs_showToast:(UIView *)toast duration:(NSTimeInterval)duration position:(id)position;
-- (void)cs_hideToast:(UIView *)toast;
-- (void)cs_hideToast:(UIView *)toast fromTap:(BOOL)fromTap;
-- (void)cs_toastTimerDidFinish:(NSTimer *)timer;
-- (void)cs_handleToastTapped:(UITapGestureRecognizer *)recognizer;
-- (CGPoint)cs_centerPointForPosition:(id)position withToast:(UIView *)toast;
-- (NSMutableArray *)cs_toastQueue;
+@interface UIView (Toast)
+
+/**
+ Creates and presents a new toast view with a message and displays it with the
+ default duration and position. Styled using the shared style.
+ 
+ @param message The message to be displayed
+ */
+- (void)makeToast:(NSString *)message;
+
+/**
+ Creates and presents a new toast view with a message. Duration and position
+ can be set explicitly. Styled using the shared style.
+ 
+ @param message The message to be displayed
+ @param duration The toast duration
+ @param position The toast's center point. Can be one of the predefined CSToastPosition
+ constants or a `CGPoint` wrapped in an `NSValue` object.
+ */
+- (void)makeToast:(NSString *)message
+         duration:(NSTimeInterval)duration
+         position:(id)position;
+
+/**
+ Creates and presents a new toast view with a message.
+ it will hide all previous toasts and position will be automatically handeled
+ */
+
+-(void)makeToast:(NSString *)message shouldHideOldToastwithAutomaticPosition:(BOOL)automaticPostion;
+
+/**
+ Creates and presents a new toast view with a message. Duration and position
+ can be set explicitly. Styled using the shared style.
+ 
+ @param message The message to be displayed
+ @param duration The toast duration
+ @param automaticPosition The toast will be shown above keyboard or below as per the .
+ */
+- (void)makeToast:(NSString *)message
+         duration:(NSTimeInterval)duration
+isPostionAutomatic:(BOOL) automaticPosition;
+/**
+ Creates and presents a new toast view with a message. Duration, position, and
+ style can be set explicitly.
+ 
+ @param message The message to be displayed
+ @param duration The toast duration
+ @param position The toast's center point. Can be one of the predefined CSToastPosition
+ constants or a `CGPoint` wrapped in an `NSValue` object.
+ @param style The style. The shared style will be used when nil
+ */
+- (void)makeToast:(NSString *)message
+         duration:(NSTimeInterval)duration
+         position:(id)position
+            style:(CSToastStyle *)style;
+
+/**
+ Creates and presents a new toast view with a message, title, and image. Duration,
+ position, and style can be set explicitly. The completion block executes when the
+ toast view completes. `didTap` will be `YES` if the toast view was dismissed from
+ a tap.
+ 
+ @param message The message to be displayed
+ @param duration The toast duration
+ @param position The toast's center point. Can be one of the predefined CSToastPosition
+ constants or a `CGPoint` wrapped in an `NSValue` object.
+ @param title The title
+ @param image The image
+ @param style The style. The shared style will be used when nil
+ @param completion The completion block, executed after the toast view disappears.
+ didTap will be `YES` if the toast view was dismissed from a tap.
+ */
+- (void)makeToast:(NSString *)message
+         duration:(NSTimeInterval)duration
+         position:(id)position
+            title:(NSString *)title
+            image:(UIImage *)image
+            style:(CSToastStyle *)style
+       completion:(void(^)(BOOL didTap))completion;
+
+/**
+ Creates a new toast view with any combination of message, title, and image.
+ The look and feel is configured via the style. Unlike the `makeToast:` methods,
+ this method does not present the toast view automatically. One of the showToast:
+ methods must be used to present the resulting view.
+ 
+ @warning if message, title, and image are all nil, this method will return nil.
+ 
+ @param message The message to be displayed
+ @param title The title
+ @param image The image
+ @param style The style. The shared style will be used when nil
+ @return The newly created toast view
+ */
+- (UIView *)toastViewForMessage:(NSString *)message
+                          title:(NSString *)title
+                          image:(UIImage *)image
+                          style:(CSToastStyle *)style;
+
+/**
+ Hides the active toast. If there are multiple toasts active in a view, this method
+ hides the oldest toast (the first of the toasts to have been presented).
+ 
+ @see `hideAllToasts` to remove all active toasts from a view.
+ 
+ @warning This method has no effect on activity toasts. Use `hideToastActivity` to
+ hide activity toasts.
+ */
+- (void)hideToast;
+
+/**
+ Hides an active toast.
+ 
+ @param toast The active toast view to dismiss. Any toast that is currently being displayed
+ on the screen is considered active.
+ 
+ @warning this does not clear a toast view that is currently waiting in the queue.
+ */
+- (void)hideToast:(UIView *)toast;
+
+/**
+ Hides all active toast views and clears the queue.
+ */
+- (void)hideAllToasts;
+
+/**
+ Hides all active toast views, with options to hide activity and clear the queue.
+ 
+ @param includeActivity If `true`, toast activity will also be hidden. Default is `false`.
+ @param clearQueue If `true`, removes all toast views from the queue. Default is `true`.
+ */
+- (void)hideAllToasts:(BOOL)includeActivity clearQueue:(BOOL)clearQueue;
+
+/**
+ Removes all toast views from the queue. This has no effect on toast views that are
+ active. Use `hideAllToasts` to hide the active toasts views and clear the queue.
+ */
+- (void)clearToastQueue;
+
+/**
+ Creates and displays a new toast activity indicator view at a specified position.
+ 
+ @warning Only one toast activity indicator view can be presented per superview. Subsequent
+ calls to `makeToastActivity:` will be ignored until hideToastActivity is called.
+ 
+ @warning `makeToastActivity:` works independently of the showToast: methods. Toast activity
+ views can be presented and dismissed while toast views are being displayed. `makeToastActivity:`
+ has no effect on the queueing behavior of the showToast: methods.
+ 
+ @param position The toast's center point. Can be one of the predefined CSToastPosition
+ constants or a `CGPoint` wrapped in an `NSValue` object.
+ */
+- (void)makeToastActivity:(id)position;
+
+/**
+ Dismisses the active toast activity indicator view.
+ */
+- (void)hideToastActivity;
+
+/**
+ Displays any view as toast using the default duration and position.
+ 
+ @param toast The view to be displayed as toast
+ */
+- (void)showToast:(UIView *)toast;
+
+/**
+ Displays any view as toast at a provided position and duration. The completion block
+ executes when the toast view completes. `didTap` will be `YES` if the toast view was
+ dismissed from a tap.
+ 
+ @param toast The view to be displayed as toast
+ @param duration The notification duration
+ @param position The toast's center point. Can be one of the predefined CSToastPosition
+ constants or a `CGPoint` wrapped in an `NSValue` object.
+ @param completion The completion block, executed after the toast view disappears.
+ didTap will be `YES` if the toast view was dismissed from a tap.
+ */
+- (void)showToast:(UIView *)toast
+         duration:(NSTimeInterval)duration
+         position:(id)position
+       completion:(void(^)(BOOL didTap))completion;
 
 @end
 
-@implementation UIView (Toast)
+/**
+ `CSToastStyle` instances define the look and feel for toast views created via the
+ `makeToast:` methods as well for toast views created directly with
+ `toastViewForMessage:title:image:style:`.
+ 
+ @warning `CSToastStyle` offers relatively simple styling options for the default
+ toast view. If you require a toast view with more complex UI, it probably makes more
+ sense to create your own custom UIView subclass and present it with the `showToast:`
+ methods.
+ */
+@interface CSToastStyle : NSObject
 
-#pragma mark - Make Toast Methods
+/**
+ The background color. Default is `[UIColor blackColor]` at 80% opacity.
+ */
+@property (strong, nonatomic) UIColor *backgroundColor;
 
-- (void)makeToast:(NSString *)message {
-    [self makeToast:message duration:[CSToastManager defaultDuration] position:[CSToastManager defaultPosition] style:nil];
-}
+/**
+ The title color. Default is `[UIColor whiteColor]`.
+ */
+@property (strong, nonatomic) UIColor *titleColor;
 
-- (void)makeToast:(NSString *)message duration:(NSTimeInterval)duration position:(id)position {
-    [self makeToast:message duration:duration position:position style:nil];
-}
+/**
+ The message color. Default is `[UIColor whiteColor]`.
+ */
+@property (strong, nonatomic) UIColor *messageColor;
 
-- (void)makeToast:(NSString *)message duration:(NSTimeInterval)duration position:(id)position style:(CSToastStyle *)style {
-    UIView *toast = [self toastViewForMessage:message title:nil image:nil style:style];
-    [self showToast:toast duration:duration position:position completion:nil];
-}
+/**
+ A percentage value from 0.0 to 1.0, representing the maximum width of the toast
+ view relative to it's superview. Default is 0.8 (80% of the superview's width).
+ */
+@property (assign, nonatomic) CGFloat maxWidthPercentage;
 
-- (void)makeToast:(NSString *)message duration:(NSTimeInterval)duration position:(id)position title:(NSString *)title image:(UIImage *)image style:(CSToastStyle *)style completion:(void(^)(BOOL didTap))completion {
-    UIView *toast = [self toastViewForMessage:message title:title image:image style:style];
-    [self showToast:toast duration:duration position:position completion:completion];
-}
+/**
+ A percentage value from 0.0 to 1.0, representing the maximum height of the toast
+ view relative to it's superview. Default is 0.8 (80% of the superview's height).
+ */
+@property (assign, nonatomic) CGFloat maxHeightPercentage;
 
-#pragma mark - Show Toast Methods
+/**
+ The spacing from the horizontal edge of the toast view to the content. When an image
+ is present, this is also used as the padding between the image and the text.
+ Default is 10.0.
+ */
+@property (assign, nonatomic) CGFloat horizontalPadding;
 
-- (void)showToast:(UIView *)toast {
-    [self showToast:toast duration:[CSToastManager defaultDuration] position:[CSToastManager defaultPosition] completion:nil];
-}
+/**
+ The spacing from the vertical edge of the toast view to the content. When a title
+ is present, this is also used as the padding between the title and the message.
+ Default is 10.0.
+ */
+@property (assign, nonatomic) CGFloat verticalPadding;
 
-- (void)showToast:(UIView *)toast duration:(NSTimeInterval)duration position:(id)position completion:(void(^)(BOOL didTap))completion {
-    // sanity
-    if (toast == nil) return;
-    
-    // store the completion block on the toast view
-    objc_setAssociatedObject(toast, &CSToastCompletionKey, completion, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    
-    if ([CSToastManager isQueueEnabled] && [self.cs_activeToasts count] > 0) {
-        // we're about to queue this toast view so we need to store the duration and position as well
-        objc_setAssociatedObject(toast, &CSToastDurationKey, @(duration), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(toast, &CSToastPositionKey, position, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        
-        // enqueue
-        [self.cs_toastQueue addObject:toast];
-    } else {
-        // present
-        [self cs_showToast:toast duration:duration position:position];
-    }
-}
+/**
+ The corner radius. Default is 10.0.
+ */
+@property (assign, nonatomic) CGFloat cornerRadius;
 
-#pragma mark - Hide Toast Methods
+/**
+ The title font. Default is `[UIFont boldSystemFontOfSize:16.0]`.
+ */
+@property (strong, nonatomic) UIFont *titleFont;
 
-- (void)hideToast {
-    [self hideToast:[[self cs_activeToasts] firstObject]];
-}
+/**
+ The message font. Default is `[UIFont systemFontOfSize:16.0]`.
+ */
+@property (strong, nonatomic) UIFont *messageFont;
 
-- (void)hideToast:(UIView *)toast {
-    // sanity
-    if (!toast || ![[self cs_activeToasts] containsObject:toast]) return;
-    
-    [self cs_hideToast:toast];
-}
+/**
+ The title text alignment. Default is `NSTextAlignmentLeft`.
+ */
+@property (assign, nonatomic) NSTextAlignment titleAlignment;
 
-- (void)hideAllToasts {
-    [self hideAllToasts:NO clearQueue:YES];
-}
+/**
+ The message text alignment. Default is `NSTextAlignmentLeft`.
+ */
+@property (assign, nonatomic) NSTextAlignment messageAlignment;
 
-- (void)hideAllToasts:(BOOL)includeActivity clearQueue:(BOOL)clearQueue {
-    if (clearQueue) {
-        [self clearToastQueue];
-    }
-    
-    for (UIView *toast in [self cs_activeToasts]) {
-        [self hideToast:toast];
-    }
-    
-    if (includeActivity) {
-        [self hideToastActivity];
-    }
-}
+/**
+ The maximum number of lines for the title. The default is 0 (no limit).
+ */
+@property (assign, nonatomic) NSInteger titleNumberOfLines;
 
-- (void)clearToastQueue {
-    [[self cs_toastQueue] removeAllObjects];
-}
+/**
+ The maximum number of lines for the message. The default is 0 (no limit).
+ */
+@property (assign, nonatomic) NSInteger messageNumberOfLines;
 
-#pragma mark - Private Show/Hide Methods
+/**
+ Enable or disable a shadow on the toast view. Default is `NO`.
+ */
+@property (assign, nonatomic) BOOL displayShadow;
 
-- (void)cs_showToast:(UIView *)toast duration:(NSTimeInterval)duration position:(id)position {
-    toast.center = [self cs_centerPointForPosition:position withToast:toast];
-    toast.alpha = 0.0;
-    
-    if ([CSToastManager isTapToDismissEnabled]) {
-        UITapGestureRecognizer *recognizer = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(cs_handleToastTapped:)];
-        [toast addGestureRecognizer:recognizer];
-        toast.userInteractionEnabled = YES;
-        toast.exclusiveTouch = YES;
-    }
-    
-    [[self cs_activeToasts] addObject:toast];
-    
-    [self addSubview:toast];
-    
-    [UIView animateWithDuration:[[CSToastManager sharedStyle] fadeDuration]
-                          delay:0.0
-                        options:(UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction)
-                     animations:^{
-                         toast.alpha = 1.0;
-                     } completion:^(BOOL finished) {
-                         NSTimer *timer = [NSTimer timerWithTimeInterval:duration target:self selector:@selector(cs_toastTimerDidFinish:) userInfo:toast repeats:NO];
-                         [[NSRunLoop mainRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
-                         objc_setAssociatedObject(toast, &CSToastTimerKey, timer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                     }];
-}
+/**
+ The shadow color. Default is `[UIColor blackColor]`.
+ */
+@property (strong, nonatomic) UIColor *shadowColor;
 
-- (void)cs_hideToast:(UIView *)toast {
-    [self cs_hideToast:toast fromTap:NO];
-}
-    
-- (void)cs_hideToast:(UIView *)toast fromTap:(BOOL)fromTap {
-    NSTimer *timer = (NSTimer *)objc_getAssociatedObject(toast, &CSToastTimerKey);
-    [timer invalidate];
-    
-    [UIView animateWithDuration:[[CSToastManager sharedStyle] fadeDuration]
-                          delay:0.0
-                        options:(UIViewAnimationOptionCurveEaseIn | UIViewAnimationOptionBeginFromCurrentState)
-                     animations:^{
-                         toast.alpha = 0.0;
-                     } completion:^(BOOL finished) {
-                         [toast removeFromSuperview];
-                         
-                         // remove
-                         [[self cs_activeToasts] removeObject:toast];
-                         
-                         // execute the completion block, if necessary
-                         void (^completion)(BOOL didTap) = objc_getAssociatedObject(toast, &CSToastCompletionKey);
-                         if (completion) {
-                             completion(fromTap);
-                         }
-                         
-                         if ([self.cs_toastQueue count] > 0) {
-                             // dequeue
-                             UIView *nextToast = [[self cs_toastQueue] firstObject];
-                             [[self cs_toastQueue] removeObjectAtIndex:0];
-                             
-                             // present the next toast
-                             NSTimeInterval duration = [objc_getAssociatedObject(nextToast, &CSToastDurationKey) doubleValue];
-                             id position = objc_getAssociatedObject(nextToast, &CSToastPositionKey);
-                             [self cs_showToast:nextToast duration:duration position:position];
-                         }
-                     }];
-}
+/**
+ A value from 0.0 to 1.0, representing the opacity of the shadow.
+ Default is 0.8 (80% opacity).
+ */
+@property (assign, nonatomic) CGFloat shadowOpacity;
 
-#pragma mark - View Construction
+/**
+ The shadow radius. Default is 6.0.
+ */
+@property (assign, nonatomic) CGFloat shadowRadius;
 
-- (UIView *)toastViewForMessage:(NSString *)message title:(NSString *)title image:(UIImage *)image style:(CSToastStyle *)style {
-    // sanity
-    if (message == nil && title == nil && image == nil) return nil;
-    
-    // default to the shared style
-    if (style == nil) {
-        style = [CSToastManager sharedStyle];
-    }
-    
-    // dynamically build a toast view with any combination of message, title, & image
-    UILabel *messageLabel = nil;
-    UILabel *titleLabel = nil;
-    UIImageView *imageView = nil;
-    
-    UIView *wrapperView = [[UIView alloc] init];
-    wrapperView.autoresizingMask = (UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin);
-    wrapperView.layer.cornerRadius = style.cornerRadius;
-    
-    if (style.displayShadow) {
-        wrapperView.layer.shadowColor = style.shadowColor.CGColor;
-        wrapperView.layer.shadowOpacity = style.shadowOpacity;
-        wrapperView.layer.shadowRadius = style.shadowRadius;
-        wrapperView.layer.shadowOffset = style.shadowOffset;
-    }
-    
-    wrapperView.backgroundColor = style.backgroundColor;
-    
-    if(image != nil) {
-        imageView = [[UIImageView alloc] initWithImage:image];
-        imageView.contentMode = UIViewContentModeScaleAspectFit;
-        imageView.frame = CGRectMake(style.horizontalPadding, style.verticalPadding, style.imageSize.width, style.imageSize.height);
-    }
-    
-    CGRect imageRect = CGRectZero;
-    
-    if(imageView != nil) {
-        imageRect.origin.x = style.horizontalPadding;
-        imageRect.origin.y = style.verticalPadding;
-        imageRect.size.width = imageView.bounds.size.width;
-        imageRect.size.height = imageView.bounds.size.height;
-    }
-    
-    if (title != nil) {
-        titleLabel = [[UILabel alloc] init];
-        titleLabel.numberOfLines = style.titleNumberOfLines;
-        titleLabel.font = style.titleFont;
-        titleLabel.textAlignment = style.titleAlignment;
-        titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-        titleLabel.textColor = style.titleColor;
-        titleLabel.backgroundColor = [UIColor clearColor];
-        titleLabel.alpha = 1.0;
-        titleLabel.text = title;
-        
-        // size the title label according to the length of the text
-        CGSize maxSizeTitle = CGSizeMake((self.bounds.size.width * style.maxWidthPercentage) - imageRect.size.width, self.bounds.size.height * style.maxHeightPercentage);
-        CGSize expectedSizeTitle = [titleLabel sizeThatFits:maxSizeTitle];
-        // UILabel can return a size larger than the max size when the number of lines is 1
-        expectedSizeTitle = CGSizeMake(MIN(maxSizeTitle.width, expectedSizeTitle.width), MIN(maxSizeTitle.height, expectedSizeTitle.height));
-        titleLabel.frame = CGRectMake(0.0, 0.0, expectedSizeTitle.width, expectedSizeTitle.height);
-    }
-    
-    if (message != nil) {
-        messageLabel = [[UILabel alloc] init];
-        messageLabel.numberOfLines = style.messageNumberOfLines;
-        messageLabel.font = style.messageFont;
-        messageLabel.textAlignment = style.messageAlignment;
-        messageLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-        messageLabel.textColor = style.messageColor;
-        messageLabel.backgroundColor = [UIColor clearColor];
-        messageLabel.alpha = 1.0;
-        messageLabel.text = message;
-        
-        CGSize maxSizeMessage = CGSizeMake((self.bounds.size.width * style.maxWidthPercentage) - imageRect.size.width, self.bounds.size.height * style.maxHeightPercentage);
-        CGSize expectedSizeMessage = [messageLabel sizeThatFits:maxSizeMessage];
-        // UILabel can return a size larger than the max size when the number of lines is 1
-        expectedSizeMessage = CGSizeMake(MIN(maxSizeMessage.width, expectedSizeMessage.width), MIN(maxSizeMessage.height, expectedSizeMessage.height));
-        messageLabel.frame = CGRectMake(0.0, 0.0, expectedSizeMessage.width, expectedSizeMessage.height);
-    }
-    
-    CGRect titleRect = CGRectZero;
-    
-    if(titleLabel != nil) {
-        titleRect.origin.x = imageRect.origin.x + imageRect.size.width + style.horizontalPadding;
-        titleRect.origin.y = style.verticalPadding;
-        titleRect.size.width = titleLabel.bounds.size.width;
-        titleRect.size.height = titleLabel.bounds.size.height;
-    }
-    
-    CGRect messageRect = CGRectZero;
-    
-    if(messageLabel != nil) {
-        messageRect.origin.x = imageRect.origin.x + imageRect.size.width + style.horizontalPadding;
-        messageRect.origin.y = titleRect.origin.y + titleRect.size.height + style.verticalPadding;
-        messageRect.size.width = messageLabel.bounds.size.width;
-        messageRect.size.height = messageLabel.bounds.size.height;
-    }
-    
-    CGFloat longerWidth = MAX(titleRect.size.width, messageRect.size.width);
-    CGFloat longerX = MAX(titleRect.origin.x, messageRect.origin.x);
-    
-    // Wrapper width uses the longerWidth or the image width, whatever is larger. Same logic applies to the wrapper height.
-    CGFloat wrapperWidth = MAX((imageRect.size.width + (style.horizontalPadding * 2.0)), (longerX + longerWidth + style.horizontalPadding));
-    CGFloat wrapperHeight = MAX((messageRect.origin.y + messageRect.size.height + style.verticalPadding), (imageRect.size.height + (style.verticalPadding * 2.0)));
-    
-    wrapperView.frame = CGRectMake(0.0, 0.0, wrapperWidth, wrapperHeight);
-    
-    if(titleLabel != nil) {
-        titleLabel.frame = titleRect;
-        [wrapperView addSubview:titleLabel];
-    }
-    
-    if(messageLabel != nil) {
-        messageLabel.frame = messageRect;
-        [wrapperView addSubview:messageLabel];
-    }
-    
-    if(imageView != nil) {
-        [wrapperView addSubview:imageView];
-    }
-    
-    return wrapperView;
-}
+/**
+ The shadow offset. The default is `CGSizeMake(4.0, 4.0)`.
+ */
+@property (assign, nonatomic) CGSize shadowOffset;
 
-#pragma mark - Storage
+/**
+ The image size. The default is `CGSizeMake(80.0, 80.0)`.
+ */
+@property (assign, nonatomic) CGSize imageSize;
 
-- (NSMutableArray *)cs_activeToasts {
-    NSMutableArray *cs_activeToasts = objc_getAssociatedObject(self, &CSToastActiveKey);
-    if (cs_activeToasts == nil) {
-        cs_activeToasts = [[NSMutableArray alloc] init];
-        objc_setAssociatedObject(self, &CSToastActiveKey, cs_activeToasts, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    return cs_activeToasts;
-}
+/**
+ The size of the toast activity view when `makeToastActivity:` is called.
+ Default is `CGSizeMake(100.0, 100.0)`.
+ */
+@property (assign, nonatomic) CGSize activitySize;
 
-- (NSMutableArray *)cs_toastQueue {
-    NSMutableArray *cs_toastQueue = objc_getAssociatedObject(self, &CSToastQueueKey);
-    if (cs_toastQueue == nil) {
-        cs_toastQueue = [[NSMutableArray alloc] init];
-        objc_setAssociatedObject(self, &CSToastQueueKey, cs_toastQueue, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    return cs_toastQueue;
-}
+/**
+ The fade in/out animation duration. Default is 0.2.
+ */
+@property (assign, nonatomic) NSTimeInterval fadeDuration;
 
-#pragma mark - Events
+/**
+ Creates a new instance of `CSToastStyle` with all the default values set.
+ */
+- (instancetype)initWithDefaultStyle NS_DESIGNATED_INITIALIZER;
 
-- (void)cs_toastTimerDidFinish:(NSTimer *)timer {
-    [self cs_hideToast:(UIView *)timer.userInfo];
-}
-
-- (void)cs_handleToastTapped:(UITapGestureRecognizer *)recognizer {
-    UIView *toast = recognizer.view;
-    NSTimer *timer = (NSTimer *)objc_getAssociatedObject(toast, &CSToastTimerKey);
-    [timer invalidate];
-    
-    [self cs_hideToast:toast fromTap:YES];
-}
-
-#pragma mark - Activity Methods
-
-- (void)makeToastActivity:(id)position {
-    // sanity
-    UIView *existingActivityView = (UIView *)objc_getAssociatedObject(self, &CSToastActivityViewKey);
-    if (existingActivityView != nil) return;
-    
-    CSToastStyle *style = [CSToastManager sharedStyle];
-    
-    UIView *activityView = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, style.activitySize.width, style.activitySize.height)];
-    activityView.center = [self cs_centerPointForPosition:position withToast:activityView];
-    activityView.backgroundColor = style.backgroundColor;
-    activityView.alpha = 0.0;
-    activityView.autoresizingMask = (UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin);
-    activityView.layer.cornerRadius = style.cornerRadius;
-    
-    if (style.displayShadow) {
-        activityView.layer.shadowColor = style.shadowColor.CGColor;
-        activityView.layer.shadowOpacity = style.shadowOpacity;
-        activityView.layer.shadowRadius = style.shadowRadius;
-        activityView.layer.shadowOffset = style.shadowOffset;
-    }
-    
-    UIActivityIndicatorView *activityIndicatorView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
-    activityIndicatorView.center = CGPointMake(activityView.bounds.size.width / 2, activityView.bounds.size.height / 2);
-    [activityView addSubview:activityIndicatorView];
-    [activityIndicatorView startAnimating];
-    
-    // associate the activity view with self
-    objc_setAssociatedObject (self, &CSToastActivityViewKey, activityView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    
-    [self addSubview:activityView];
-    
-    [UIView animateWithDuration:style.fadeDuration
-                          delay:0.0
-                        options:UIViewAnimationOptionCurveEaseOut
-                     animations:^{
-                         activityView.alpha = 1.0;
-                     } completion:nil];
-}
-
-- (void)hideToastActivity {
-    UIView *existingActivityView = (UIView *)objc_getAssociatedObject(self, &CSToastActivityViewKey);
-    if (existingActivityView != nil) {
-        [UIView animateWithDuration:[[CSToastManager sharedStyle] fadeDuration]
-                              delay:0.0
-                            options:(UIViewAnimationOptionCurveEaseIn | UIViewAnimationOptionBeginFromCurrentState)
-                         animations:^{
-                             existingActivityView.alpha = 0.0;
-                         } completion:^(BOOL finished) {
-                             [existingActivityView removeFromSuperview];
-                             objc_setAssociatedObject (self, &CSToastActivityViewKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                         }];
-    }
-}
-
-#pragma mark - Helpers
-
-- (CGPoint)cs_centerPointForPosition:(id)point withToast:(UIView *)toast {
-    CSToastStyle *style = [CSToastManager sharedStyle];
-    
-    UIEdgeInsets safeInsets = UIEdgeInsetsZero;
-    if (@available(iOS 11.0, *)) {
-        safeInsets = self.safeAreaInsets;
-    }
-    
-    CGFloat topPadding = style.verticalPadding + safeInsets.top;
-    CGFloat bottomPadding = style.verticalPadding + safeInsets.bottom;
-    
-    if([point isKindOfClass:[NSString class]]) {
-        if([point caseInsensitiveCompare:CSToastPositionTop] == NSOrderedSame) {
-            return CGPointMake(self.bounds.size.width / 2.0, (toast.frame.size.height / 2.0) + topPadding);
-        } else if([point caseInsensitiveCompare:CSToastPositionCenter] == NSOrderedSame) {
-            return CGPointMake(self.bounds.size.width / 2.0, self.bounds.size.height / 2.0);
-        }
-    } else if ([point isKindOfClass:[NSValue class]]) {
-        return [point CGPointValue];
-    }
-    
-    // default to bottom
-    return CGPointMake(self.bounds.size.width / 2.0, (self.bounds.size.height - (toast.frame.size.height / 2.0)) - bottomPadding);
-}
+/**
+ @warning Only the designated initializer should be used to create
+ an instance of `CSToastStyle`.
+ */
+- (instancetype)init NS_UNAVAILABLE;
 
 @end
 
-@implementation CSToastStyle
+/**
+ `CSToastManager` provides general configuration options for all toast
+ notifications. Backed by a singleton instance.
+ */
+@interface CSToastManager : NSObject
 
-#pragma mark - Constructors
+/**
+ Sets the shared style on the singleton. The shared style is used whenever
+ a `makeToast:` method (or `toastViewForMessage:title:image:style:`) is called
+ with with a nil style. By default, this is set to `CSToastStyle`'s default
+ style.
+ 
+ @param sharedStyle the shared style
+ */
++ (void)setSharedStyle:(CSToastStyle *)sharedStyle;
 
-- (instancetype)initWithDefaultStyle {
-    self = [super init];
-    if (self) {
-        self.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.8];
-        self.titleColor = [UIColor whiteColor];
-        self.messageColor = [UIColor whiteColor];
-        self.maxWidthPercentage = 0.8;
-        self.maxHeightPercentage = 0.8;
-        self.horizontalPadding = 10.0;
-        self.verticalPadding = 10.0;
-        self.cornerRadius = 10.0;
-        self.titleFont = [UIFont boldSystemFontOfSize:16.0];
-        self.messageFont = [UIFont systemFontOfSize:16.0];
-        self.titleAlignment = NSTextAlignmentLeft;
-        self.messageAlignment = NSTextAlignmentLeft;
-        self.titleNumberOfLines = 0;
-        self.messageNumberOfLines = 0;
-        self.displayShadow = NO;
-        self.shadowOpacity = 0.8;
-        self.shadowRadius = 6.0;
-        self.shadowOffset = CGSizeMake(4.0, 4.0);
-        self.imageSize = CGSizeMake(80.0, 80.0);
-        self.activitySize = CGSizeMake(100.0, 100.0);
-        self.fadeDuration = 0.2;
-    }
-    return self;
-}
+/**
+ Gets the shared style from the singlton. By default, this is
+ `CSToastStyle`'s default style.
+ 
+ @return the shared style
+ */
++ (CSToastStyle *)sharedStyle;
 
-- (void)setMaxWidthPercentage:(CGFloat)maxWidthPercentage {
-    _maxWidthPercentage = MAX(MIN(maxWidthPercentage, 1.0), 0.0);
-}
+/**
+ Enables or disables tap to dismiss on toast views. Default is `YES`.
+ 
+ @param tapToDismissEnabled YES or NO
+ */
++ (void)setTapToDismissEnabled:(BOOL)tapToDismissEnabled;
 
-- (void)setMaxHeightPercentage:(CGFloat)maxHeightPercentage {
-    _maxHeightPercentage = MAX(MIN(maxHeightPercentage, 1.0), 0.0);
-}
+/**
+ Returns `YES` if tap to dismiss is enabled, otherwise `NO`.
+ Default is `YES`.
+ 
+ @return BOOL YES or NO
+ */
++ (BOOL)isTapToDismissEnabled;
 
-- (instancetype)init NS_UNAVAILABLE {
-    return nil;
-}
+/**
+ Enables or disables queueing behavior for toast views. When `YES`,
+ toast views will appear one after the other. When `NO`, multiple Toast
+ views will appear at the same time (potentially overlapping depending
+ on their positions). This has no effect on the toast activity view,
+ which operates independently of normal toast views. Default is `NO`.
+ 
+ @param queueEnabled YES or NO
+ */
++ (void)setQueueEnabled:(BOOL)queueEnabled;
 
-@end
+/**
+ Returns `YES` if the queue is enabled, otherwise `NO`.
+ Default is `NO`.
+ 
+ @return BOOL
+ */
++ (BOOL)isQueueEnabled;
 
-@interface CSToastManager ()
+/**
+ Sets the default duration. Used for the `makeToast:` and
+ `showToast:` methods that don't require an explicit duration.
+ Default is 3.0.
+ 
+ @param duration The toast duration
+ */
++ (void)setDefaultDuration:(NSTimeInterval)duration;
 
-@property (strong, nonatomic) CSToastStyle *sharedStyle;
-@property (assign, nonatomic, getter=isTapToDismissEnabled) BOOL tapToDismissEnabled;
-@property (assign, nonatomic, getter=isQueueEnabled) BOOL queueEnabled;
-@property (assign, nonatomic) NSTimeInterval defaultDuration;
-@property (strong, nonatomic) id defaultPosition;
+/**
+ Returns the default duration. Default is 3.0.
+ 
+ @return duration The toast duration
+ */
++ (NSTimeInterval)defaultDuration;
 
-@end
+/**
+ Sets the default position. Used for the `makeToast:` and
+ `showToast:` methods that don't require an explicit position.
+ Default is `CSToastPositionBottom`.
+ 
+ @param position The default center point. Can be one of the predefined
+ CSToastPosition constants or a `CGPoint` wrapped in an `NSValue` object.
+ */
++ (void)setDefaultPosition:(id)position;
 
-@implementation CSToastManager
-
-#pragma mark - Constructors
-
-+ (instancetype)sharedManager {
-    static CSToastManager *_sharedManager = nil;
-    static dispatch_once_t oncePredicate;
-    dispatch_once(&oncePredicate, ^{
-        _sharedManager = [[self alloc] init];
-    });
-    
-    return _sharedManager;
-}
-
-- (instancetype)init {
-    self = [super init];
-    if (self) {
-        self.sharedStyle = [[CSToastStyle alloc] initWithDefaultStyle];
-        self.tapToDismissEnabled = YES;
-        self.queueEnabled = NO;
-        self.defaultDuration = 3.0;
-        self.defaultPosition = CSToastPositionBottom;
-    }
-    return self;
-}
-
-#pragma mark - Singleton Methods
-
-+ (void)setSharedStyle:(CSToastStyle *)sharedStyle {
-    [[self sharedManager] setSharedStyle:sharedStyle];
-}
-
-+ (CSToastStyle *)sharedStyle {
-    return [[self sharedManager] sharedStyle];
-}
-
-+ (void)setTapToDismissEnabled:(BOOL)tapToDismissEnabled {
-    [[self sharedManager] setTapToDismissEnabled:tapToDismissEnabled];
-}
-
-+ (BOOL)isTapToDismissEnabled {
-    return [[self sharedManager] isTapToDismissEnabled];
-}
-
-+ (void)setQueueEnabled:(BOOL)queueEnabled {
-    [[self sharedManager] setQueueEnabled:queueEnabled];
-}
-
-+ (BOOL)isQueueEnabled {
-    return [[self sharedManager] isQueueEnabled];
-}
-
-+ (void)setDefaultDuration:(NSTimeInterval)duration {
-    [[self sharedManager] setDefaultDuration:duration];
-}
-
-+ (NSTimeInterval)defaultDuration {
-    return [[self sharedManager] defaultDuration];
-}
-
-+ (void)setDefaultPosition:(id)position {
-    if ([position isKindOfClass:[NSString class]] || [position isKindOfClass:[NSValue class]]) {
-        [[self sharedManager] setDefaultPosition:position];
-    }
-}
-
-+ (id)defaultPosition {
-    return [[self sharedManager] defaultPosition];
-}
+/**
+ Returns the default toast position. Default is `CSToastPositionBottom`.
+ 
+ @return position The default center point. Will be one of the predefined
+ CSToastPosition constants or a `CGPoint` wrapped in an `NSValue` object.
+ */
++ (id)defaultPosition;
 
 @end
